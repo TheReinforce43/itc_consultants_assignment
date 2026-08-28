@@ -35,4 +35,3 @@ class User(AbstractUser):
         return f'{self.email}'
 
 
-
