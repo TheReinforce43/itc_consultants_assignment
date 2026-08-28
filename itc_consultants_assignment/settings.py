@@ -113,6 +113,15 @@ WSGI_APPLICATION = "itc_consultants_assignment.wsgi.application"
 #     }
 # }
 
+
+
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',  # Your frontend URL
+]
+
+
+
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -158,8 +167,17 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Base url to serve media files
+MEDIA_URL = '/media/'
+
+# Path where media is stored'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
