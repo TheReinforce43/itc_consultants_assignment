@@ -24,6 +24,7 @@ services:
              python manage.py collectstatic --noinput &&
              gunicorn itc_consultants_assignment.wsgi:application --bind 0.0.0.0:8000 --workers 3"
     volumes:
+      - .:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     expose:
@@ -51,4 +52,3 @@ volumes:
   postgres_data:
   static_volume:
   media_volume:
-

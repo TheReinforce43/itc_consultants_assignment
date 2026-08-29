@@ -1,639 +1,480 @@
-# Django REST Framework Project
+# ITC Consultants Assignment
 
-A production-ready Django REST Framework (DRF) API with JWT authentication, Docker containerization, NGINX reverse proxy, Redis caching, comprehensive testing, rate limiting, email notifications, stored procedures, and Swagger API documentation.
+A Django REST Framework backend implementing JWT-based authentication (Signup, Login, Logout, Token Refresh) and a role-based Task management API, fully dockerized with Nginx, PostgreSQL, automated tests, and CI.
+
+---
 
 ## Table of Contents
 
 - [Features](#features)
-- [Prerequisites](#prerequisites)
+- [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
-- [Installation & Setup](#installation--setup)
-- [Environment Configuration](#environment-configuration)
-- [Running the Application](#running-the-application)
-- [Docker Deployment](#docker-deployment)
-- [API Documentation](#api-documentation)
-- [Authentication (JWT)](#authentication-jwt)
+- [Authentication Flow](#authentication-flow)
+  - [1. Signup](#1-signup)
+  - [2. Login](#2-login)
+  - [3. Logout](#3-logout)
+  - [4. Token Refresh](#4-token-refresh)
+- [Role-Based Access Control (RBAC)](#role-based-access-control-rbac)
+- [API Endpoints](#api-endpoints)
+- [Setup & Installation](#setup--installation)
+- [Environment Variables](#environment-variables)
+- [Running with Docker](#running-with-docker)
+- [Running Migrations](#running-migrations)
+- [Running Tests](#running-tests)
+- [CI/CD (GitHub Actions)](#cicd-github-actions)
 - [Rate Limiting](#rate-limiting)
-- [Email Configuration](#email-configuration)
-- [Using Stored Procedures](#using-stored-procedures)
-- [Testing](#testing)
-- [Caching with Redis](#caching-with-redis)
-- [Monitoring & Logs](#monitoring--logs)
-- [Troubleshooting](#troubleshooting)
+- [CORS & Allowed Hosts](#cors--allowed-hosts)
+- [Error Handling / Edge Cases](#error-handling--edge-cases)
 
 ---
 
 ## Features
 
-✅ **JWT Authentication** - Secure token-based authentication  
-✅ **Docker & Docker Compose** - Containerized development and production  
-✅ **NGINX** - Reverse proxy and load balancing  
-✅ **Redis** - Caching and rate limiting backend  
-✅ **Pytest** - Comprehensive testing suite with AAA pattern  
-✅ **Rate Limiting/Throttling** - Per-user and anonymous rate limits  
-✅ **Email Notifications** - Async email sending on signup  
-✅ **Stored Procedures** - Database-level logic instead of ORM  
-✅ **Swagger/OpenAPI** - Interactive API documentation  
-✅ **PostgreSQL** - Robust relational database  
-✅ **Celery** - Async task queue for email and background jobs  
+- User signup with model-level validation
+- JWT-based login and logout (with token blacklisting)
+- Automatic access token renewal via refresh token
+- Role-Based Access Control (Admin / Seller / Customer / Staff)
+- Task CRUD API with per-role permissions
+- Request throttling (rate limiting) for both anonymous and authenticated users
+- CORS configuration for frontend integration
+- Environment-based `ALLOWED_HOSTS` (dev vs production)
+- Dockerized setup with Nginx reverse proxy and PostgreSQL
+- Unit testing with `pytest`
+- GitHub Actions CI pipeline for automated testing
 
 ---
 
-## Prerequisites
+## Tech Stack
 
-- Python 3.10+
-- PostgreSQL 13+
-- Redis 7+
-- Docker & Docker Compose
-- Git
+| Layer          | Technology                          |
+|----------------|--------------------------------------|
+| Language       | Python 3.12                          |
+| Framework      | Django + Django REST Framework       |
+| Auth           | `djangorestframework-simplejwt`      |
+| Database       | PostgreSQL 16                        |
+| Web Server     | Gunicorn                             |
+| Reverse Proxy  | Nginx                                |
+| Testing        | Pytest                               |
+| CI/CD          | GitHub Actions                       |
+| Containerization | Docker & Docker Compose            |
 
 ---
 
 ## Project Structure
 
 ```
-project_root/
-├── manage.py
-├── requirements.txt
-├── docker-compose.yml
-├── Dockerfile
-├── nginx.conf
-├── pytest.ini
-├── .env.example
-├── .gitignore
-│
-├── config/
-│   ├── settings/
-│   │   ├── base.py
-│   │   ├── dev.py
-│   │   ├── prod.py
-│   │   └── __init__.py
+itc_consultants_assignment/
+├── user/
+│   ├── View/
+│   │   └── user_view.py        # Signup, Login, Logout, Refresh Token views
+│   ├── models.py                # Custom User model (roles: Admin, Seller, Customer)
 │   ├── urls.py
-│   ├── wsgi.py
-│   └── celery.py
-│
-├── apps/
-│   ├── users/
-│   │   ├── models.py
-│   │   ├── serializers.py
-│   │   ├── views.py
-│   │   ├── urls.py
-│   │   ├── tasks.py
-│   │   └── tests/
-│   │       ├── test_models.py
-│   │       ├── test_views.py
-│   │       └── test_serializers.py
-│   │
-│   ├── products/
-│   │   ├── models.py
-│   │   ├── serializers.py
-│   │   ├── views.py
-│   │   ├── urls.py
-│   │   └── tests/
-│   │
-│   └── orders/
-│       ├── models.py
-│       ├── serializers.py
-│       ├── views.py
-│       ├── urls.py
-│       └── tests/
-│
-├── utils/
-│   ├── db.py (stored procedures)
-│   ├── decorators.py
-│   └── exceptions.py
-│
-└── docker/
-    ├── Dockerfile
-    ├── docker-compose.yml
-    └── nginx.conf
+│   └── migrations/
+├── task/
+│   ├── View/
+│   │   └── task_view.py        # TaskViewSet (ModelViewSet)
+│   ├── permissions.py          # TaskPermission (RBAC logic)
+│   ├── models.py                # TaskModel
+│   ├── urls.py                  # DRF DefaultRouter
+│   └── migrations/
+├── nginx/
+│   └── nginx.conf
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+└── manage.py
 ```
 
 ---
 
-## Installation & Setup
+## Authentication Flow
 
-### 1. Clone and Setup Virtual Environment
+### 1. Signup
 
-```bash
-git clone <repository-url>
-cd project_root
+**Endpoint:** `POST /api/user/signup/`
 
-# Create virtual environment
-python -m venv venv
+Order of validation on every signup request:
 
-# Activate virtual environment
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+1. **Rate limiting** — Anonymous users are throttled (see [Rate Limiting](#rate-limiting)). Exceeding the limit returns `429 Too Many Requests`.
+2. **CORS check** — Only requests originating from an allowed origin (`CORS_ALLOWED_ORIGINS`) are accepted by the browser; other origins are blocked at the browser level.
+3. **Allowed hosts check** — The `Host` header must match `ALLOWED_HOSTS`, or Django returns a `400 Bad Request` (`DisallowedHost`).
+4. **Model / serializer validation** — Email format, password strength, uniqueness of email, and required fields are validated. Invalid input returns `400 Bad Request` with field-level error messages.
 
-# Install dependencies
-pip install -r requirements.txt
+If all checks pass, a new `User` record is created and the user can proceed to log in.
+
+**Sample Request:**
+```json
+POST /api/user/signup/
+{
+  "email": "john@example.com",
+  "password": "StrongPass123!",
+  "roles": "Customer"
+}
 ```
 
-### 2. Install Required Packages
-
-```bash
-# requirements.txt should contain:
-Django==4.2.0
-djangorestframework==3.14.0
-djangorestframework-simplejwt==5.2.2
-django-redis==5.2.0
-psycopg2-binary==2.9.6
-celery==5.3.0
-drf-spectacular==0.26.1
-pytest==7.3.1
-pytest-django==4.5.2
-pytest-cov==4.1.0
-django-cors-headers==4.0.0
-python-decouple==3.8
+**Sample Success Response (201):**
+```json
+{
+  "email": "john@example.com",
+  "roles": "Customer"
+}
 ```
 
-Install all:
-```bash
-pip install -r requirements.txt
+**Sample Failure Responses:**
+```json
+// 400 - Validation error
+{
+  "email": ["User with this email already exists."]
+}
+```
+```json
+// 429 - Rate limit exceeded
+{
+  "detail": "Request was throttled. Expected available in 42 seconds."
+}
 ```
 
-### 3. Create Environment File
+---
 
+### 2. Login
+
+**Endpoint:** `POST /api/user/login/`
+
+Validation order:
+
+1. Check that the account with the given **email** exists.
+2. Verify the **password** against the stored hash.
+3. If either check fails, return a generic `401 Unauthorized` (avoid leaking whether the email or password was wrong, to prevent user enumeration).
+4. On success, issue a JWT **access token** and **refresh token**.
+
+**Sample Request:**
+```json
+POST /api/user/login/
+{
+  "email": "john@example.com",
+  "password": "StrongPass123!"
+}
+```
+
+**Sample Success Response (200):**
+```json
+{
+  "access": "eyJhbGciOi...",
+  "refresh": "eyJhbGciOi..."
+}
+```
+
+**Sample Failure Response (401):**
+```json
+{
+  "detail": "Invalid email or password."
+}
+```
+
+---
+
+### 3. Logout
+
+**Endpoint:** `POST /api/user/logout/`
+
+- Requires a valid **access token** in the `Authorization` header.
+- Accepts the user's **refresh token** in the request body.
+- The refresh token is **blacklisted**, so it can no longer be used to generate new access tokens — effectively ending the session.
+
+**Sample Request:**
+```
+POST /api/user/logout/
+Authorization: Bearer <access_token>
+
+{
+  "refresh": "eyJhbGciOi..."
+}
+```
+
+**Sample Success Response (200):**
+```json
+{
+  "detail": "Successfully logged out."
+}
+```
+
+**Sample Failure Response (400):**
+```json
+{
+  "detail": "Token is invalid or already blacklisted."
+}
+```
+
+> **Note:** Token blacklisting requires `rest_framework_simplejwt.token_blacklist` to be added to `INSTALLED_APPS`, with its migrations applied.
+
+---
+
+### 4. Token Refresh
+
+**Endpoint:** `POST /api/user/refresh-token/`
+
+- When the **access token expires**, the client sends the **refresh token** to this endpoint.
+- If the refresh token is valid (not expired, not blacklisted), a new access token is issued.
+- If the refresh token is also expired or blacklisted, the user must log in again.
+
+**Sample Request:**
+```json
+POST /api/user/refresh-token/
+{
+  "refresh": "eyJhbGciOi..."
+}
+```
+
+**Sample Success Response (200):**
+```json
+{
+  "access": "eyJhbGciOi..."
+}
+```
+
+**Sample Failure Response (401):**
+```json
+{
+  "detail": "Token is invalid or expired.",
+  "code": "token_not_valid"
+}
+```
+
+**Frontend integration tip:** Use an HTTP interceptor (Axios/Fetch) that detects a `401` on any API call, automatically calls `/refresh-token/`, retries the original request with the new access token, and redirects to login only if the refresh also fails.
+
+---
+
+## Role-Based Access Control (RBAC)
+
+Roles are defined on the `User` model:
+
+```python
+user_roles = (
+    ('Admin', 'Admin'),
+    ('Seller', 'Seller'),
+    ('Customer', 'Customer'),
+)
+```
+
+Permissions are enforced in `TaskPermission` (`task/permissions.py`):
+
+| Role       | GET / List | POST (Create) | PUT / PATCH (Update) | DELETE |
+|------------|:----------:|:--------------:|:---------------------:|:------:|
+| **Admin (superuser)** | ✅ | ✅ | ✅ | ✅ |
+| **Staff**  | ✅ | ✅ | ✅ | ❌ |
+| **Customer** | ✅ | ❌ | ❌ | ❌ |
+| **Seller** | ❌ (not currently handled — see note below) | ❌ | ❌ | ❌ |
+| **Unauthenticated** | ❌ | ❌ | ❌ | ❌ |
+
+> ⚠️ **Known inconsistency to review:** `user_roles` defines `Admin`, `Seller`, `Customer`, but `TaskPermission` checks for `"Customer"` and `"Staff"` — `"Staff"` and `"Seller"` do not match. Confirm whether `"Staff"` should be renamed to `"Seller"` in either the model choices or the permission class so Seller accounts get the intended access instead of falling through to `return False`.
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|:--------------:|--------------|
+| POST | `/api/user/signup/` | No | Register a new user |
+| POST | `/api/user/login/` | No | Obtain access & refresh tokens |
+| POST | `/api/user/logout/` | Yes | Blacklist refresh token |
+| POST | `/api/user/refresh-token/` | No (refresh token in body) | Get new access token |
+| GET | `/api/task/tasks/` | Yes | List tasks |
+| POST | `/api/task/tasks/` | Yes (Admin/Staff) | Create a task |
+| GET | `/api/task/tasks/{id}/` | Yes | Retrieve a task |
+| PUT/PATCH | `/api/task/tasks/{id}/` | Yes (Admin/Staff) | Update a task |
+| DELETE | `/api/task/tasks/{id}/` | Yes (Admin only) | Delete a task |
+
+> Base path (`/api/user/`, `/api/task/`) assumes these urls.py files are included under those prefixes in the project's root `urls.py`. Adjust if your routing differs.
+
+---
+
+## Setup & Installation
+
+### Prerequisites
+- Docker & Docker Compose
+- (Optional, for local dev without Docker) Python 3.12, PostgreSQL 16
+
+### Clone the repository
+```bash
+git clone <repo-url>
+cd itc_consultants_assignment
+```
+
+### Create environment file
 ```bash
 cp .env.example .env
 ```
-
-Edit `.env` with your configuration (see [Environment Configuration](#environment-configuration))
-
-### 4. Database Setup
-
-```bash
-# Run migrations
-python manage.py migrate
-
-# Create superuser
-python manage.py createsuperuser
-
-# Load initial data (if needed)
-python manage.py loaddata fixtures/initial_data.json
-```
+Fill in the values as described in [Environment Variables](#environment-variables).
 
 ---
 
-## Environment Configuration
+## Environment Variables
 
-Create `.env` file in project root:
+Create a `.env` file in the project root:
 
 ```env
 # Django
-DEBUG=True
-SECRET_KEY=your-secret-key-here
-ALLOWED_HOSTS=localhost,127.0.0.1
+SECRET_KEY=your-secret-key
+DEBUG=1
 
 # Database
-DB_ENGINE=django.db.backends.postgresql
-DB_NAME=drf_db
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_HOST=localhost
+DB_NAME=itc_db
+DB_USER=itc_user
+DB_PASSWORD=itc_password
+DB_HOST=db
 DB_PORT=5432
-
-# Redis
-REDIS_URL=redis://localhost:6379/0
-CACHE_REDIS_URL=redis://localhost:6379/1
-
-# JWT
-JWT_SECRET_KEY=your-jwt-secret-key
-JWT_ALGORITHM=HS256
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
-JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
-
-# Email Configuration
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USE_TLS=True
-EMAIL_HOST_USER=your-email@gmail.com
-EMAIL_HOST_PASSWORD=your-app-password
-
-# Celery
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
-
-# Rate Limiting
-RATE_LIMIT_ANON=5/minute
-RATE_LIMIT_USER=30/minute
-
-# AWS (if using S3)
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_STORAGE_BUCKET_NAME=
 ```
+
+| Variable | Description |
+|----------|--------------|
+| `SECRET_KEY` | Django secret key |
+| `DEBUG` | `1` for development (allows all hosts), `0` for production |
+| `DB_NAME` / `DB_USER` / `DB_PASSWORD` | PostgreSQL credentials |
+| `DB_HOST` | Set to `db` (the Docker Compose service name) |
+| `DB_PORT` | Default `5432` |
 
 ---
 
-## Running the Application
+## Running with Docker
 
-### Development (Without Docker)
+Build and start all services (`db`, `web`, `nginx`):
 
 ```bash
-# Start PostgreSQL
-sudo service postgresql start
-
-# Start Redis
-redis-server
-
-# Start Celery worker (in separate terminal)
-celery -A config worker -l info
-
-# Start Celery beat scheduler (in separate terminal)
-celery -A config beat -l info
-
-# Run development server
-python manage.py runserver
+docker compose up -d --build
 ```
 
-Visit: `http://localhost:8000`
+Check that all containers are running:
+```bash
+docker compose ps
+```
 
-### Development (With Docker)
+The API will be available through Nginx at:
+```
+http://localhost/
+```
 
-See [Docker Deployment](#docker-deployment) section
+> Note: `web` (gunicorn) only listens internally on port `8000` and is **not** published to the host directly — all traffic goes through Nginx on port `80`.
+
+Stop all services:
+```bash
+docker compose down
+```
 
 ---
 
-## Docker Deployment
+## Running Migrations
 
-### Prerequisites
+Whenever models change:
 
-- Docker installed
-- Docker Compose installed
-
-### Directory Structure for Docker
-
-```
-docker/
-├── Dockerfile
-├── docker-compose.yml
-├── docker-compose.prod.yml
-└── nginx.conf
+```bash
+docker compose exec web python manage.py makemigrations
+docker compose exec web python manage.py migrate
 ```
 
-### docker-compose.yml (Development)
+> If a container is crash-looping and `exec` fails, use `docker compose run --rm web python manage.py makemigrations` instead — it spins up a fresh container so you can still generate migrations, which will persist to your host via the project's bind mount (`.:/app`).
+
+---
+
+## Running Tests
+
+Unit tests are written with `pytest` (via `pytest-django`).
+
+```bash
+docker compose exec web pytest
+```
+
+Run with coverage:
+```bash
+docker compose exec web pytest --cov=.
+```
+
+Run a specific test file:
+```bash
+docker compose exec web pytest user/tests/test_auth.py
+```
+
+Suggested test coverage:
+- Signup: valid data, duplicate email, weak password, missing fields, rate limit exceeded
+- Login: correct credentials, wrong password, non-existent email
+- Logout: valid token blacklisted, already-blacklisted token, missing token
+- Refresh: valid refresh token, expired refresh token, blacklisted refresh token
+- Task permissions: each role against each HTTP method
+
+---
+
+## CI/CD (GitHub Actions)
+
+A workflow (e.g. `.github/workflows/ci.yml`) runs the test suite automatically on every push / pull request:
 
 ```yaml
-version: '3.9'
+name: CI
 
-services:
-  db:
-    image: postgres:15
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+jobs:
+  test:
+    runs-on: ubuntu-latest
 
-  web:
-    build: .
-    command: |
-      sh -c "python manage.py migrate &&
-             python manage.py collectstatic --noinput &&
-             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4"
-    volumes:
-      - .:/app
-      - static_volume:/app/staticfiles
-    ports:
-      - "8000:8000"
-    environment:
-      - DEBUG=${DEBUG}
-      - SECRET_KEY=${SECRET_KEY}
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: itc_db
+          POSTGRES_USER: itc_user
+          POSTGRES_PASSWORD: itc_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
 
-  celery:
-    build: .
-    command: celery -A config worker -l info
-    volumes:
-      - .:/app
-    environment:
-      - DEBUG=${DEBUG}
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      - db
-      - redis
-      - web
+    steps:
+      - uses: actions/checkout@v4
 
-  celery-beat:
-    build: .
-    command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
-    volumes:
-      - .:/app
-    environment:
-      - DEBUG=${DEBUG}
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      - db
-      - redis
-      - web
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-  nginx:
-    image: nginx:alpine
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - static_volume:/app/staticfiles:ro
-    ports:
-      - "80:80"
-    depends_on:
-      - web
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
 
-volumes:
-  postgres_data:
-  static_volume:
+      - name: Run migrations
+        env:
+          DB_NAME: itc_db
+          DB_USER: itc_user
+          DB_PASSWORD: itc_password
+          DB_HOST: localhost
+          DB_PORT: 5432
+        run: |
+          python manage.py migrate
+
+      - name: Run tests
+        env:
+          DB_NAME: itc_db
+          DB_USER: itc_user
+          DB_PASSWORD: itc_password
+          DB_HOST: localhost
+          DB_PORT: 5432
+        run: |
+          pytest
 ```
 
-### Dockerfile
-
-```dockerfile
-FROM python:3.10-slim
-
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy project
-COPY . .
-
-# Collect static files
-RUN python manage.py collectstatic --noinput || true
-
-EXPOSE 8000
-
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
-```
-
-### NGINX Configuration (nginx.conf)
-
-```nginx
-user nginx;
-worker_processes auto;
-error_log /var/log/nginx/error.log warn;
-pid /var/run/nginx.pid;
-
-events {
-    worker_connections 1024;
-}
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
-                    '$status $body_bytes_sent "$http_referer" '
-                    '"$http_user_agent" "$http_x_forwarded_for"';
-
-    access_log /var/log/nginx/access.log main;
-
-    sendfile on;
-    tcp_nopush on;
-    tcp_nodelay on;
-    keepalive_timeout 65;
-    types_hash_max_size 2048;
-    client_max_body_size 100M;
-
-    # Rate limiting zones
-    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=5r/m;
-    limit_req_zone $http_x_forwarded_for zone=user_limit:10m rate=30r/m;
-
-    upstream django_app {
-        server web:8000;
-    }
-
-    server {
-        listen 80;
-        server_name _;
-
-        # Static files
-        location /static/ {
-            alias /app/staticfiles/;
-        }
-
-        # API with rate limiting
-        location /api/ {
-            limit_req zone=api_limit burst=10 nodelay;
-            
-            proxy_pass http://django_app;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_read_timeout 30s;
-        }
-
-        # Swagger docs
-        location /api/docs/ {
-            proxy_pass http://django_app;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-        }
-
-        # Health check
-        location /health/ {
-            proxy_pass http://django_app;
-            access_log off;
-        }
-
-        # Redirect root to API docs
-        location / {
-            return 301 /api/docs/;
-        }
-    }
-}
-```
-
-### Run with Docker Compose
-
-```bash
-# Development
-docker-compose up -d
-
-# View logs
-docker-compose logs -f web
-
-# Run migrations
-docker-compose exec web python manage.py migrate
-
-# Create superuser
-docker-compose exec web python manage.py createsuperuser
-
-# Shutdown
-docker-compose down
-```
-
----
-
-## API Documentation
-
-### Swagger/OpenAPI Setup
-
-**1. Install package:**
-```bash
-pip install drf-spectacular
-```
-
-**2. Update settings.py:**
-
-```python
-INSTALLED_APPS = [
-    # ...
-    'drf_spectacular',
-    'rest_framework',
-]
-
-REST_FRAMEWORK = {
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-}
-
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'Your API',
-    'DESCRIPTION': 'API Documentation',
-    'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
-    'SCHEMA_PATH_PREFIX': r'/api/',
-    'SWAGGER_UI_SETTINGS': {
-        'deepLinking': True,
-        'persistAuthorizationData': True,
-        'displayOperationId': False,
-    },
-}
-```
-
-**3. Update urls.py:**
-
-```python
-from drf_spectacular.views import SpectacularSwaggerView, SpectacularRetrieveAPIView
-
-urlpatterns = [
-    path('api/schema/', SpectacularRetrieveAPIView.as_view(), name='schema'),
-    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-]
-```
-
-**4. Access Swagger UI:**
-```
-http://localhost:8000/api/docs/
-```
-
----
-
-## Authentication (JWT)
-
-### 1. JWT Configuration
-
-**settings.py:**
-```python
-INSTALLED_APPS = [
-    'rest_framework_simplejwt',
-]
-
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-}
-
-from datetime import timedelta
-
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': False,
-    'ALGORITHM': 'HS256',
-    'SIGNING_KEY': SECRET_KEY,
-}
-```
-
-### 2. User Authentication Views
-
-**apps/users/views.py:**
-```python
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from rest_framework import status
-from .serializers import UserSerializer
-from .models import User
-from .tasks import send_welcome_email
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def signup(request):
-    """User registration with email verification"""
-    serializer = UserSerializer(data=request.data)
-    if serializer.is_valid():
-        user = serializer.save()
-        # Send welcome email asynchronously
-        send_welcome_email.delay(user.id)
-        return Response(
-            {'message': 'User created. Check email for verification.'},
-            status=status.HTTP_201_CREATED
-        )
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-```
-
-### 3. Using JWT in Requests
-
-```bash
-# Get tokens
-curl -X POST http://localhost:8000/api/token/ \
-  -H "Content-Type: application/json" \
-  -d '{"username":"user","password":"pass"}'
-
-# Use access token
-curl -H "Authorization: Bearer <access_token>" \
-  http://localhost:8000/api/protected-endpoint/
-
-# Refresh token
-curl -X POST http://localhost:8000/api/token/refresh/ \
-  -H "Content-Type: application/json" \
-  -d '{"refresh":"<refresh_token>"}'
-```
+> Adjust environment variable names to match whatever your `settings.py` actually reads.
 
 ---
 
 ## Rate Limiting
 
-### Configuration
+Configured globally in `settings.py`:
 
-**settings.py:**
 ```python
 REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_CLASSES': [
@@ -641,936 +482,61 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '5/minute',      # 5 hits per minute for anonymous
-        'user': '30/minute'      # 30 hits per minute for authenticated
-    }
-}
-
-# Cache settings for throttling
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0'),
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        }
+        'anon': '5/minute',
+        'user': '30/minute',
     }
 }
 ```
 
-### Custom Throttles
-
-**utils/throttles.py:**
-```python
-from rest_framework.throttling import SimpleRateThrottle
-
-class UnauthenticatedThrottle(SimpleRateThrottle):
-    scope = 'unauthenticated'
-    
-    def get_cache_key(self):
-        if self.request.user and self.request.user.is_authenticated:
-            return None
-        return self.cache_format % {
-            'scope': self.scope,
-            'ident': self.get_ident(self.request)
-        }
-
-class LoginThrottle(SimpleRateThrottle):
-    """Strict rate limit for login attempts"""
-    scope = 'login'
-    
-    def get_cache_key(self):
-        return self.cache_format % {
-            'scope': self.scope,
-            'ident': self.get_ident(self.request)
-        }
-```
-
-### Apply to Views
-
-```python
-from rest_framework.decorators import throttle_classes
-from utils.throttles import LoginThrottle
-
-@throttle_classes([LoginThrottle])
-class LoginView(APIView):
-    def post(self, request):
-        # Login logic
-        pass
-```
+- **Anonymous users** (e.g. calling `/signup/` or `/login/`): max **5 requests/minute**.
+- **Authenticated users**: max **30 requests/minute**.
+- Exceeding the limit returns `429 Too Many Requests` with a `Retry-After`-style message.
 
 ---
 
-## Email Configuration
+## CORS & Allowed Hosts
 
-### 1. Environment Setup
-
-Add to `.env`:
-```env
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USE_TLS=True
-EMAIL_HOST_USER=your-email@gmail.com
-EMAIL_HOST_PASSWORD=your-app-password
-```
-
-### 2. Settings Configuration
-
-**config/settings/base.py:**
 ```python
-import os
-
-EMAIL_BACKEND = os.getenv(
-    'EMAIL_BACKEND',
-    'django.core.mail.backends.smtp.EmailBackend'
-)
-EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', True)
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
-```
-
-### 3. Celery Task for Email
-
-**apps/users/tasks.py:**
-```python
-from celery import shared_task
-from django.core.mail import send_mail
-from django.template.loader import render_to_string
-from .models import User
-
-@shared_task
-def send_welcome_email(user_id):
-    """Send welcome email to newly registered user"""
-    try:
-        user = User.objects.get(id=user_id)
-        
-        context = {
-            'username': user.username,
-            'email': user.email,
-        }
-        
-        html_message = render_to_string('emails/welcome.html', context)
-        
-        send_mail(
-            subject='Welcome to Our Platform',
-            message=f'Welcome {user.username}!',
-            from_email='noreply@example.com',
-            recipient_list=[user.email],
-            html_message=html_message,
-            fail_silently=False,
-        )
-        print(f"Welcome email sent to {user.email}")
-    except User.DoesNotExist:
-        print(f"User {user_id} not found")
-    except Exception as e:
-        print(f"Error sending email: {str(e)}")
-
-@shared_task
-def send_password_reset_email(user_id, reset_token):
-    """Send password reset email"""
-    try:
-        user = User.objects.get(id=user_id)
-        reset_link = f"https://yoursite.com/reset-password/{reset_token}/"
-        
-        send_mail(
-            subject='Password Reset Request',
-            message=f'Reset your password here: {reset_link}',
-            from_email='noreply@example.com',
-            recipient_list=[user.email],
-            fail_silently=False,
-        )
-    except Exception as e:
-        print(f"Error sending reset email: {str(e)}")
-```
-
-### 4. Email Template
-
-**templates/emails/welcome.html:**
-```html
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body { font-family: Arial, sans-serif; }
-        .container { max-width: 600px; margin: 0 auto; }
-        .header { background-color: #007bff; color: white; padding: 20px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Welcome to Our Platform!</h1>
-        </div>
-        <p>Hi {{ username }},</p>
-        <p>Thank you for signing up. Your account has been created successfully.</p>
-        <p>Email: {{ email }}</p>
-        <p>Best regards,<br>The Team</p>
-    </div>
-</body>
-</html>
-```
-
-### 5. Trigger Email on Signup
-
-**apps/users/views.py:**
-```python
-from .tasks import send_welcome_email
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def signup(request):
-    serializer = UserSerializer(data=request.data)
-    if serializer.is_valid():
-        user = serializer.save()
-        # Send async email
-        send_welcome_email.delay(user.id)
-        return Response(
-            {'message': 'User created. Check email.'},
-            status=status.HTTP_201_CREATED
-        )
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-```
-
----
-
-## Using Stored Procedures
-
-### 1. Create Stored Procedure in PostgreSQL
-
-```sql
--- Create function/procedure in PostgreSQL
-CREATE OR REPLACE FUNCTION calculate_order_total(p_order_id INTEGER)
-RETURNS TABLE (
-    order_id INTEGER,
-    total_amount DECIMAL,
-    tax DECIMAL,
-    final_price DECIMAL
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        o.id,
-        o.total_amount,
-        o.tax,
-        (o.total_amount + o.tax) as final_price
-    FROM orders o
-    WHERE o.id = p_order_id;
-END;
-$$ LANGUAGE plpgsql;
-```
-
-### 2. Utility Function for Stored Procedures
-
-**utils/db.py:**
-```python
-from django.db import connection
-
-def call_stored_procedure(proc_name, params=None):
-    """
-    Universal helper to call stored procedures/functions
-    
-    Args:
-        proc_name: Name of stored procedure/function
-        params: List of parameters
-    
-    Returns:
-        Tuple (results, error)
-    """
-    try:
-        with connection.cursor() as cursor:
-            if params:
-                placeholders = ','.join(['%s'] * len(params))
-                cursor.execute(
-                    f'SELECT * FROM {proc_name}({placeholders})',
-                    params
-                )
-            else:
-                cursor.execute(f'SELECT * FROM {proc_name}()')
-            
-            columns = [col[0] for col in cursor.description]
-            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-            
-            return results, None
-    except Exception as e:
-        return None, str(e)
-
-def execute_stored_procedure(proc_name, params=None):
-    """Execute stored procedure that modifies data (INSERT/UPDATE/DELETE)"""
-    try:
-        with connection.cursor() as cursor:
-            if params:
-                placeholders = ','.join(['%s'] * len(params))
-                cursor.callproc(proc_name, params)
-            else:
-                cursor.callproc(proc_name, [])
-        return True, None
-    except Exception as e:
-        return False, str(e)
-```
-
-### 3. Use in Views
-
-**apps/orders/views.py:**
-```python
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework import status, viewsets
-from utils.db import call_stored_procedure, execute_stored_procedure
-from .models import Order
-from .serializers import OrderSerializer
-
-class OrderViewSet(viewsets.ModelViewSet):
-    queryset = Order.objects.all()
-    serializer_class = OrderSerializer
-    
-    @action(detail=True, methods=['get'])
-    def calculate_total(self, request, pk=None):
-        """Call stored procedure to calculate order total"""
-        results, error = call_stored_procedure('calculate_order_total', [pk])
-        
-        if error:
-            return Response(
-                {'error': error},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        
-        if not results:
-            return Response(
-                {'error': 'Order not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        return Response(results[0])
-    
-    @action(detail=True, methods=['post'])
-    def apply_discount(self, request, pk=None):
-        """Call procedure to apply discount"""
-        discount = request.data.get('discount')
-        
-        success, error = execute_stored_procedure(
-            'apply_order_discount',
-            [pk, discount]
-        )
-        
-        if not success:
-            return Response(
-                {'error': error},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        
-        return Response({'status': 'Discount applied'})
-```
-
-### 4. Run Stored Procedures with Django Management Command
-
-**apps/orders/management/commands/init_procedures.py:**
-```python
-from django.core.management.base import BaseCommand
-from django.db import connection
-
-class Command(BaseCommand):
-    help = 'Initialize database stored procedures'
-    
-    def handle(self, *args, **options):
-        with connection.cursor() as cursor:
-            # Read SQL file
-            with open('apps/orders/sql/procedures.sql', 'r') as f:
-                sql = f.read()
-            
-            cursor.execute(sql)
-        
-        self.stdout.write(
-            self.style.SUCCESS('Stored procedures created successfully')
-        )
-```
-
-Run:
-```bash
-python manage.py init_procedures
-```
-
----
-
-## Testing
-
-### 1. Pytest Configuration
-
-**pytest.ini:**
-```ini
-[pytest]
-DJANGO_SETTINGS_MODULE = config.settings.test
-python_files = tests.py test_*.py *_tests.py
-python_classes = Test*
-python_functions = test_*
-addopts = --cov=apps --cov-report=html --cov-report=term-missing -v
-testpaths = apps
-```
-
-**config/settings/test.py:**
-```python
-from .base import *
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',
-    }
-}
-
-CELERY_ALWAYS_EAGER = True
-CELERY_EAGER_PROPAGATES = True
-
-EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
-
-DEBUG = True
-```
-
-### 2. Test Structure (AAA Pattern)
-
-**apps/users/tests/test_views.py:**
-```python
-import pytest
-from django.contrib.auth import get_user_model
-from rest_framework.test import APIClient
-from rest_framework import status
-
-User = get_user_model()
-
-@pytest.mark.django_db
-class TestUserSignUp:
-    
-    def setup_method(self):
-        """Setup for each test"""
-        self.client = APIClient()
-        self.signup_url = '/api/users/signup/'
-    
-    def test_user_signup_success(self):
-        # Arrange
-        payload = {
-            'username': 'testuser',
-            'email': 'test@example.com',
-            'password': 'testpass123',
-            'password2': 'testpass123',
-        }
-        
-        # Act
-        response = self.client.post(self.signup_url, payload)
-        
-        # Assert
-        assert response.status_code == status.HTTP_201_CREATED
-        assert User.objects.filter(username='testuser').exists()
-    
-    def test_user_signup_invalid_email(self):
-        # Arrange
-        payload = {
-            'username': 'testuser',
-            'email': 'invalid-email',
-            'password': 'testpass123',
-            'password2': 'testpass123',
-        }
-        
-        # Act
-        response = self.client.post(self.signup_url, payload)
-        
-        # Assert
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'email' in response.data
-    
-    def test_user_signup_password_mismatch(self):
-        # Arrange
-        payload = {
-            'username': 'testuser',
-            'email': 'test@example.com',
-            'password': 'testpass123',
-            'password2': 'different',
-        }
-        
-        # Act
-        response = self.client.post(self.signup_url, payload)
-        
-        # Assert
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-
-@pytest.mark.django_db
-class TestUserLogin:
-    
-    def setup_method(self):
-        self.client = APIClient()
-        self.login_url = '/api/token/'
-        self.user = User.objects.create_user(
-            username='testuser',
-            password='testpass123',
-            email='test@example.com'
-        )
-    
-    def test_login_success(self):
-        # Arrange
-        payload = {
-            'username': 'testuser',
-            'password': 'testpass123',
-        }
-        
-        # Act
-        response = self.client.post(self.login_url, payload)
-        
-        # Assert
-        assert response.status_code == status.HTTP_200_OK
-        assert 'access' in response.data
-        assert 'refresh' in response.data
-    
-    def test_login_invalid_credentials(self):
-        # Arrange
-        payload = {
-            'username': 'testuser',
-            'password': 'wrongpassword',
-        }
-        
-        # Act
-        response = self.client.post(self.login_url, payload)
-        
-        # Assert
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
-```
-
-### 3. Run Tests
-
-```bash
-# Run all tests
-pytest
-
-# Run specific test file
-pytest apps/users/tests/test_views.py
-
-# Run specific test class
-pytest apps/users/tests/test_views.py::TestUserSignUp
-
-# Run specific test with verbose output
-pytest -v apps/users/tests/test_views.py::TestUserSignUp::test_user_signup_success
-
-# Run with coverage report
-pytest --cov=apps --cov-report=html
-
-# Run tests in parallel
-pytest -n auto
-```
-
----
-
-## Caching with Redis
-
-### 1. Redis Configuration
-
-**settings.py:**
-```python
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0'),
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'SOCKET_CONNECT_TIMEOUT': 5,
-            'SOCKET_TIMEOUT': 5,
-            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
-            'IGNORE_EXCEPTIONS': True,
-        }
-    }
-}
-
-# Cache timeout (1 hour)
-CACHE_TTL = 60 * 60
-```
-
-### 2. Cache in Views
-
-**apps/products/views.py:**
-```python
-from django.views.decorators.cache import cache_page
-from django.core.cache import cache
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-
-# Cache for 1 hour
-@cache_page(60 * 60)
-@api_view(['GET'])
-def get_products(request):
-    products = Product.objects.all()
-    serializer = ProductSerializer(products, many=True)
-    return Response(serializer.data)
-
-# Manual cache control
-@api_view(['GET'])
-def get_product_detail(request, pk):
-    cache_key = f'product_{pk}'
-    
-    # Try to get from cache
-    product_data = cache.get(cache_key)
-    
-    if product_data is None:
-        product = Product.objects.get(pk=pk)
-        serializer = ProductSerializer(product)
-        product_data = serializer.data
-        # Cache for 1 hour
-        cache.set(cache_key, product_data, 60 * 60)
-    
-    return Response(product_data)
-
-# Invalidate cache on update
-@api_view(['PUT'])
-def update_product(request, pk):
-    product = Product.objects.get(pk=pk)
-    serializer = ProductSerializer(product, data=request.data, partial=True)
-    
-    if serializer.is_valid():
-        serializer.save()
-        # Clear cache
-        cache.delete(f'product_{pk}')
-        return Response(serializer.data)
-    
-    return Response(serializer.errors, status=400)
-```
-
-### 3. Cache Decorator Utility
-
-**utils/decorators.py:**
-```python
-from functools import wraps
-from django.core.cache import cache
-
-def cache_result(timeout=3600):
-    """Decorator to cache function results"""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            cache_key = f"{func.__name__}_{str(args)}_{str(kwargs)}"
-            result = cache.get(cache_key)
-            
-            if result is None:
-                result = func(*args, **kwargs)
-                cache.set(cache_key, result, timeout)
-            
-            return result
-        return wrapper
-    return decorator
-
-# Usage
-@cache_result(timeout=60*60)
-def get_expensive_calculation():
-    return expensive_operation()
-```
-
----
-
-## Monitoring & Logs
-
-### 1. Logging Configuration
-
-**settings.py:**
-```python
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
-        },
-        'simple': {
-            'format': '{levelname} {asctime} {message}',
-            'style': '{',
-        },
-    },
-    'filters': {
-        'require_debug_false': {
-            '()': 'django.utils.log.RequireDebugFalse',
-        },
-        'require_debug_true': {
-            '()': 'django.utils.log.RequireDebugTrue',
-        },
-    },
-    'handlers': {
-        'console': {
-            'level': 'INFO',
-            'class': 'logging.StreamHandler',
-            'formatter': 'simple',
-        },
-        'file': {
-            'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': 'logs/django.log',
-            'maxBytes': 1024 * 1024 * 15,  # 15MB
-            'backupCount': 10,
-            'formatter': 'verbose',
-        },
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['console', 'file'],
-            'level': 'INFO',
-        },
-        'celery': {
-            'handlers': ['console', 'file'],
-            'level': 'INFO',
-        },
-        'apps': {
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG',
-        },
-    },
-}
-```
-
-### 2. Application Logging
-
-**apps/users/views.py:**
-```python
-import logging
-
-logger = logging.getLogger(__name__)
-
-@api_view(['POST'])
-def signup(request):
-    logger.info(f"New signup attempt from {request.META.get('REMOTE_ADDR')}")
-    
-    try:
-        serializer = UserSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            logger.info(f"User {user.id} created successfully")
-            send_welcome_email.delay(user.id)
-            return Response({'message': 'Success'}, status=201)
-        else:
-            logger.warning(f"Signup validation failed: {serializer.errors}")
-            return Response(serializer.errors, status=400)
-    except Exception as e:
-        logger.error(f"Signup error: {str(e)}", exc_info=True)
-        return Response({'error': 'Server error'}, status=500)
-```
-
-### 3. Health Check Endpoint
-
-**config/urls.py:**
-```python
-from django.http import JsonResponse
-
-def health_check(request):
-    """Health check endpoint for monitoring"""
-    from django.db import connection
-    from django_redis import get_redis_connection
-    
-    status = {'status': 'ok', 'checks': {}}
-    
-    # Check database
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute('SELECT 1')
-        status['checks']['database'] = 'ok'
-    except Exception as e:
-        status['status'] = 'error'
-        status['checks']['database'] = str(e)
-    
-    # Check Redis
-    try:
-        redis_conn = get_redis_connection('default')
-        redis_conn.ping()
-        status['checks']['redis'] = 'ok'
-    except Exception as e:
-        status['status'] = 'error'
-        status['checks']['redis'] = str(e)
-    
-    status_code = 200 if status['status'] == 'ok' else 503
-    return JsonResponse(status, status=status_code)
-
-urlpatterns = [
-    path('health/', health_check),
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',  # frontend dev URL
 ]
 ```
+- Only origins in this list can make cross-origin requests (e.g. from a React/Next.js frontend running on port 3000).
+- Add your production frontend domain here before deploying.
+
+```python
+if DEBUG:
+    ALLOWED_HOSTS = ["*", "127.0.0.1", "localhost"]
+else:
+    ALLOWED_HOSTS = [
+        # production domain(s) go here, e.g. "api.yourdomain.com"
+    ]
+```
+- In development (`DEBUG=1`), all hosts are allowed for convenience.
+- In production (`DEBUG=0`), **you must explicitly list your domain(s)** — an empty list will cause every request to fail with `400 Bad Request` (`DisallowedHost`), so this must be filled in before deploying.
 
 ---
 
-## Troubleshooting
+## Error Handling / Edge Cases
 
-### PostgreSQL Connection Issues
-
-```bash
-# Check if PostgreSQL is running
-sudo service postgresql status
-
-# Check connection
-psql -U postgres -d drf_db -c "SELECT 1"
-
-# Docker: Check logs
-docker-compose logs db
-```
-
-### Redis Connection Issues
-
-```bash
-# Check if Redis is running
-redis-cli ping
-
-# Docker: Check logs
-docker-compose logs redis
-
-# Check Redis connection
-redis-cli -u redis://localhost:6379
-```
-
-### Celery Issues
-
-```bash
-# View Celery logs
-docker-compose logs celery
-
-# Inspect active tasks
-celery -A config inspect active
-
-# Purge all pending tasks
-celery -A config purge
-```
-
-### Docker Issues
-
-```bash
-# Rebuild containers
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
-
-# Check service status
-docker-compose ps
-
-# View full logs
-docker-compose logs -f
-```
-
-### Database Migration Issues
-
-```bash
-# Makemigrations
-python manage.py makemigrations
-
-# Show pending migrations
-python manage.py showmigrations
-
-# Migrate specific app
-python manage.py migrate users
-
-# Rollback migration
-python manage.py migrate users 0001
-```
-
-### Email Not Sending
-
-```bash
-# Test email configuration
-python manage.py shell
-
->>> from django.core.mail import send_mail
->>> send_mail('Test', 'Test message', 'from@example.com', ['to@example.com'])
-1  # Returns 1 if successful
-
-# Check email backend in settings
-# Check credentials in .env
-# Check Gmail app password (if using Gmail)
-```
-
-### Static Files Issues
-
-```bash
-# Collect static files
-python manage.py collectstatic --noinput
-
-# Docker: Rebuild
-docker-compose up -d --build
-```
-
----
-
-## Deployment Checklist
-
-- [ ] Update `SECRET_KEY` in production
-- [ ] Set `DEBUG = False`
-- [ ] Configure `ALLOWED_HOSTS`
-- [ ] Setup SSL/TLS certificates
-- [ ] Configure email backend
-- [ ] Setup database backups
-- [ ] Configure Redis persistence
-- [ ] Enable logging and monitoring
-- [ ] Setup error tracking (Sentry)
-- [ ] Configure CDN for static files
-- [ ] Setup automated deployments
-- [ ] Test disaster recovery
-
----
-
-## Useful Commands
-
-```bash
-# Development
-python manage.py runserver
-python manage.py createsuperuser
-python manage.py makemigrations
-python manage.py migrate
-
-# Testing
-pytest
-pytest --cov=apps
-pytest -v apps/users/tests/
-
-# Database
-python manage.py dbshell
-python manage.py dumpdata > backup.json
-python manage.py loaddata backup.json
-
-# Cache
-python manage.py shell
->>> from django.core.cache import cache
->>> cache.clear()
-
-# Celery
-celery -A config worker -l info
-celery -A config beat -l info
-
-# Docker
-docker-compose up -d
-docker-compose down
-docker-compose logs -f web
-docker-compose exec web python manage.py migrate
-```
-
----
-
-## Resources
-
-- [Django Documentation](https://docs.djangoproject.com/)
-- [Django REST Framework](https://www.django-rest-framework.org/)
-- [SimpleJWT Documentation](https://django-rest-framework-simplejwt.readthedocs.io/)
-- [Celery Documentation](https://docs.celeryproject.org/)
-- [Docker Documentation](https://docs.docker.com/)
-- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
-- [drf-spectacular](https://drf-spectacular.readthedocs.io/)
-- [Pytest Documentation](https://docs.pytest.org/)
+| Scenario | Expected Behavior |
+|----------|--------------------|
+| Signup with existing email | `400` with field error |
+| Signup rate limit exceeded | `429` |
+| Signup with invalid/mismatched Host header | `400 DisallowedHost` |
+| Login with wrong password | `401` generic error (no user enumeration) |
+| Login with non-existent email | `401` generic error (same message as wrong password) |
+| Logout without access token | `401 Unauthorized` |
+| Logout with already-blacklisted refresh token | `400` token invalid |
+| Refresh with expired refresh token | `401`, client should force re-login |
+| Refresh with blacklisted refresh token | `401 token_not_valid` |
+| Task create/update/delete by Customer | `403 Forbidden` |
+| Task delete by Staff | `403 Forbidden` (only Admin can delete) |
+| Any Task endpoint without auth | `401 Unauthorized` |
+| CORS request from disallowed origin | Blocked by browser (no `Access-Control-Allow-Origin` header) |
 
 ---
 
 ## License
 
-This project is licensed under the MIT License.
-
----
-
-## Support
-
-For issues or questions:
-1. Check [Troubleshooting](#troubleshooting) section
-2. Review application logs
-3. Check Docker/service status
-4. Submit issues on repository
-
----
-
-**Last Updated:** August 2026
+This project is provided for assignment/demo purposes.
