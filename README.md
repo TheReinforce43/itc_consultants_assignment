@@ -66,26 +66,59 @@ A Django REST Framework backend implementing JWT-based authentication (Signup, L
 
 ```
 itc_consultants_assignment/
+├── itc_consultants_assignment/
+│   ├── settings.py
+│   ├── urls.py
+│   ├── wsgi.py
+│   └── asgi.py
 ├── user/
 │   ├── View/
-│   │   └── user_view.py        # Signup, Login, Logout, Refresh Token views
-│   ├── models.py                # Custom User model (roles: Admin, Seller, Customer)
+│   │   └── user_view.py         # Signup, Login, Logout, Refresh Token views
+│   ├── Serializer/
+│   │   └── user_serializer.py   # User signup/login serializers
+│   ├── models.py                 # Custom User model (roles: Admin, Seller, Customer)
+│   ├── custom_manager.py         # Custom user manager (email-based user creation)
 │   ├── urls.py
-│   └── migrations/
+│   ├── migrations/
+│   └── tests/
+│       ├── conftest.py
+│       ├── test_models.py
+│       ├── test_serializers.py
+│       ├── test_views.py
+│       └── authentication.py     # ⚠️ missing 'test_' prefix — not collected by pytest, see note below
 ├── task/
 │   ├── View/
-│   │   └── task_view.py        # TaskViewSet (ModelViewSet)
-│   ├── permissions.py          # TaskPermission (RBAC logic)
-│   ├── models.py                # TaskModel
-│   ├── urls.py                  # DRF DefaultRouter
-│   └── migrations/
+│   │   └── task_view.py          # TaskViewSet (ModelViewSet)
+│   ├── Model/
+│   │   └── task_model.py         # TaskModel
+│   ├── Serializer/
+│   │   └── task_serializer.py    # TaskSerializer
+│   ├── urls.py                   # DRF DefaultRouter
+│   ├── migrations/
+│   └── tests/
+│       ├── conftest.py
+│       ├── test_authentication.py
+│       ├── test_models.py
+│       ├── test_serializers.py
+│       └── test_views.py
 ├── nginx/
 │   └── nginx.conf
+├── .github/
+│   └── workflows/
+│       └── unit_testing_live.yml
 ├── Dockerfile
 ├── docker-compose.yml
+├── pytest.ini
 ├── requirements.txt
+├── utils.py
 └── manage.py
 ```
+
+> ⚠️ **Cleanup needed:** `user/user_view.py` and `user/user_serializer.py` currently exist at the app root **alongside** `user/View/user_view.py` and `user/Serializer/user_serializer.py`. Since `user/urls.py` imports from `user.View.user_view`, the root-level copies are likely stale duplicates from an earlier refactor — confirm and remove whichever isn't in active use to avoid drift between the two.
+>
+> ⚠️ `TaskPermission` (referenced throughout the RBAC/ABAC sections below) is not present as a standalone `task/permissions.py` in the current tree — confirm its actual location (e.g. inside `task/View/task_view.py`) so this doc stays accurate.
+>
+> ⚠️ `user/tests/authentication.py` is missing the required `test_` prefix from `pytest.ini`'s `python_files` pattern, so **pytest silently skips this file** — rename it to `test_authentication.py` to include it in the suite.
 
 ---
 
@@ -595,3 +628,7 @@ else:
 | CORS request from disallowed origin | Blocked by browser (no `Access-Control-Allow-Origin` header) |
 
 ---
+
+## License
+
+This project is provided for assignment purposes.
