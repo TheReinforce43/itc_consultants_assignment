@@ -34,7 +34,7 @@ A Django REST Framework backend implementing JWT-based authentication (Signup, L
 - User signup with model-level validation
 - JWT-based login and logout (with token blacklisting)
 - Automatic access token renewal via refresh token
-- Role-Based Access Control (RBAC) — Admin / Seller / Customer / Staff
+- Role-Based Access Control (RBAC) — Admin / Staff / Customer
 - Attribute-Based Access Control (ABAC) — time-based write restriction (no create/update/delete after 6 PM)
 - Task CRUD API with per-role, per-time-window permissions
 - Request throttling (rate limiting) for both anonymous and authenticated users
@@ -76,7 +76,7 @@ itc_consultants_assignment/
 │   │   └── user_view.py         # Signup, Login, Logout, Refresh Token views
 │   ├── Serializer/
 │   │   └── user_serializer.py   # User signup/login serializers
-│   ├── models.py                 # Custom User model (roles: Admin, Seller, Customer)
+│   ├── models.py                 # Custom User model (roles: Admin, Staff, Customer)
 │   ├── custom_manager.py         # Custom user manager (email-based user creation)
 │   ├── urls.py
 │   ├── migrations/
@@ -84,11 +84,10 @@ itc_consultants_assignment/
 │       ├── conftest.py
 │       ├── test_models.py
 │       ├── test_serializers.py
-│       ├── test_views.py
-│       └── authentication.py     # ⚠️ missing 'test_' prefix — not collected by pytest, see note below
+│       └── test_views.py
 ├── task/
 │   ├── View/
-│   │   └── task_view.py          # TaskViewSet (ModelViewSet)
+│   │   └── task_view.py          # TaskViewSet (ModelViewSet) + TaskPermission (RBAC/ABAC)
 │   ├── Model/
 │   │   └── task_model.py         # TaskModel
 │   ├── Serializer/
@@ -113,12 +112,6 @@ itc_consultants_assignment/
 ├── utils.py
 └── manage.py
 ```
-
-> ⚠️ **Cleanup needed:** `user/user_view.py` and `user/user_serializer.py` currently exist at the app root **alongside** `user/View/user_view.py` and `user/Serializer/user_serializer.py`. Since `user/urls.py` imports from `user.View.user_view`, the root-level copies are likely stale duplicates from an earlier refactor — confirm and remove whichever isn't in active use to avoid drift between the two.
->
-> ⚠️ `TaskPermission` (referenced throughout the RBAC/ABAC sections below) is not present as a standalone `task/permissions.py` in the current tree — confirm its actual location (e.g. inside `task/View/task_view.py`) so this doc stays accurate.
->
-> ⚠️ `user/tests/authentication.py` is missing the required `test_` prefix from `pytest.ini`'s `python_files` pattern, so **pytest silently skips this file** — rename it to `test_authentication.py` to include it in the suite.
 
 ---
 
@@ -286,22 +279,19 @@ Roles are defined on the `User` model:
 ```python
 user_roles = (
     ('Admin', 'Admin'),
-    ('Seller', 'Seller'),
+    ('Staff', 'Staff'),
     ('Customer', 'Customer'),
 )
 ```
 
-Permissions are enforced in `TaskPermission` (`task/permissions.py`):
+Permissions are enforced in `TaskPermission`:
 
 | Role       | GET / List | POST (Create) | PUT / PATCH (Update) | DELETE |
 |------------|:----------:|:--------------:|:---------------------:|:------:|
 | **Admin (superuser)** | ✅ | ✅ | ✅ | ✅ |
 | **Staff**  | ✅ | ✅ | ✅ | ❌ |
 | **Customer** | ✅ | ❌ | ❌ | ❌ |
-| **Seller** | ❌ (not currently handled — see note below) | ❌ | ❌ | ❌ |
 | **Unauthenticated** | ❌ | ❌ | ❌ | ❌ |
-
-> ⚠️ **Known inconsistency to review:** `user_roles` defines `Admin`, `Seller`, `Customer`, but `TaskPermission` checks for `"Customer"` and `"Staff"` — `"Staff"` and `"Seller"` do not match. Confirm whether `"Staff"` should be renamed to `"Seller"` in either the model choices or the permission class so Seller accounts get the intended access instead of falling through to `return False`.
 
 ---
 
