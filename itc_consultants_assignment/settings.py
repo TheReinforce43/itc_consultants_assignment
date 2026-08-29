@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import os 
-
+import sys
 import environ 
 
 env = environ.Env()
@@ -122,16 +122,41 @@ CORS_ALLOWED_ORIGINS = [
 
 
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': env('DB_NAME'),
-        'USER': env('DB_USER'),
-        'PASSWORD': env('DB_PASSWORD'),
-        'HOST': env('DB_HOST', default='db'),
-        'PORT': env('DB_PORT', default='5432'),
+IS_TESTING = (
+    "test" in sys.argv 
+    or "pytest" in sys.argv[0] 
+    or "pytest" in sys.modules 
+    or env.bool("TESTING", default=False)
+)
+
+CACHE_TTL = 60 * 15
+
+
+if IS_TESTING:
+    # Use SQLite for tests
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": ":memory:",   # Fastest (in-memory DB)
+        }
     }
-}
+    EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+
+    PASSWORD_HASHERS = [
+        "django.contrib.auth.hashers.MD5PasswordHasher",
+    ]
+elif DEBUG:
+
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': env('DB_NAME'),
+            'USER': env('DB_USER'),
+            'PASSWORD': env('DB_PASSWORD'),
+            'HOST': env('DB_HOST', default='db'),
+            'PORT': env('DB_PORT', default='5432'),
+        }
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators

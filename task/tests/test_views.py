@@ -19,7 +19,7 @@ def test_customer_can_list_tasks(
     )
 
     response = api_client.get(
-        "/tasks/"
+        "/task/tasks/"
     )
 
     assert response.status_code == status.HTTP_200_OK
@@ -37,7 +37,7 @@ def test_customer_can_list_tasks(
     )
 
     response = api_client.get(
-        "/tasks/"
+        "/task/tasks/"
     )
 
     assert response.status_code == status.HTTP_200_OK
@@ -64,7 +64,7 @@ def test_customer_cannot_create_task(
     }
 
     response = api_client.post(
-        "/tasks/",
+        "/task/tasks/",
         data,
         format="json",
     )
@@ -93,7 +93,7 @@ def test_customer_cannot_update_task(
     }
 
     response = api_client.patch(
-        f"/tasks/{task.id}/",
+        f"/task/tasks/{task.id}/",
         data,
         format="json",
     )
@@ -118,7 +118,7 @@ def test_customer_cannot_delete_task(
     )
 
     response = api_client.delete(
-        f"/tasks/{task.id}/"
+        f"/task/tasks/{task.id}/"
     )
 
     assert (
@@ -141,7 +141,7 @@ def test_staff_can_list_tasks(
     )
 
     response = api_client.get(
-        "/tasks/"
+        "/task/tasks/"
     )
 
     assert response.status_code == status.HTTP_200_OK
@@ -159,7 +159,7 @@ def test_staff_can_list_tasks(
     )
 
     response = api_client.get(
-        "/tasks/"
+        "/task/tasks/"
     )
 
     assert response.status_code == status.HTTP_200_OK
@@ -183,7 +183,7 @@ def test_staff_can_update_task(
     }
 
     response = api_client.patch(
-        f"/tasks/{task.id}/",
+        f"/task/tasks/{task.id}/",
         data,
         format="json",
     )
@@ -212,7 +212,7 @@ def test_staff_cannot_delete_task(
     )
 
     response = api_client.delete(
-        f"/tasks/{task.id}/"
+        f"/task/tasks/{task.id}/"
     )
 
     assert (
@@ -234,7 +234,7 @@ def test_admin_can_list_tasks(
     )
 
     response = api_client.get(
-        "/tasks/"
+        "/task/tasks/"
     )
 
     assert response.status_code == status.HTTP_200_OK
@@ -257,7 +257,7 @@ def test_admin_can_create_task(
     }
 
     response = api_client.post(
-        "/tasks/",
+        "/task/tasks/",
         data,
         format="json",
     )
@@ -292,7 +292,7 @@ def test_admin_can_update_task(
     }
 
     response = api_client.patch(
-        f"/tasks/{task.id}/",
+        f"/task/tasks/{task.id}/",
         data,
         format="json",
     )
@@ -320,7 +320,7 @@ def test_admin_can_delete_task(
     )
 
     response = api_client.delete(
-        f"/tasks/{task.id}/"
+        f"/task/tasks/{task.id}/"
     )
 
     assert (
