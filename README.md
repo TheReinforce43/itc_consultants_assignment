@@ -15,6 +15,7 @@ A Django REST Framework backend implementing JWT-based authentication (Signup, L
   - [3. Logout](#3-logout)
   - [4. Token Refresh](#4-token-refresh)
 - [Role-Based Access Control (RBAC)](#role-based-access-control-rbac)
+- [Attribute-Based Access Control (ABAC)](#attribute-based-access-control-abac)
 - [API Endpoints](#api-endpoints)
 - [Setup & Installation](#setup--installation)
 - [Environment Variables](#environment-variables)
@@ -33,8 +34,9 @@ A Django REST Framework backend implementing JWT-based authentication (Signup, L
 - User signup with model-level validation
 - JWT-based login and logout (with token blacklisting)
 - Automatic access token renewal via refresh token
-- Role-Based Access Control (Admin / Seller / Customer / Staff)
-- Task CRUD API with per-role permissions
+- Role-Based Access Control (RBAC) — Admin / Seller / Customer / Staff
+- Attribute-Based Access Control (ABAC) — time-based write restriction (no create/update/delete after 6 PM)
+- Task CRUD API with per-role, per-time-window permissions
 - Request throttling (rate limiting) for both anonymous and authenticated users
 - CORS configuration for frontend integration
 - Environment-based `ALLOWED_HOSTS` (dev vs production)
@@ -91,7 +93,7 @@ itc_consultants_assignment/
 
 ### 1. Signup
 
-**Endpoint:** `POST /api/user/signup/`
+**Endpoint:** `POST /user/signup/`
 
 Order of validation on every signup request:
 
@@ -104,7 +106,7 @@ If all checks pass, a new `User` record is created and the user can proceed to l
 
 **Sample Request:**
 ```json
-POST /api/user/signup/
+POST /user/signup/
 {
   "email": "john@example.com",
   "password": "StrongPass123!",
@@ -138,7 +140,7 @@ POST /api/user/signup/
 
 ### 2. Login
 
-**Endpoint:** `POST /api/user/login/`
+**Endpoint:** `POST /user/login/`
 
 Validation order:
 
@@ -149,7 +151,7 @@ Validation order:
 
 **Sample Request:**
 ```json
-POST /api/user/login/
+POST /user/login/
 {
   "email": "john@example.com",
   "password": "StrongPass123!"
@@ -175,7 +177,7 @@ POST /api/user/login/
 
 ### 3. Logout
 
-**Endpoint:** `POST /api/user/logout/`
+**Endpoint:** `POST /user/logout/`
 
 - Requires a valid **access token** in the `Authorization` header.
 - Accepts the user's **refresh token** in the request body.
@@ -183,7 +185,7 @@ POST /api/user/login/
 
 **Sample Request:**
 ```
-POST /api/user/logout/
+POST /user/logout/
 Authorization: Bearer <access_token>
 
 {
@@ -211,7 +213,7 @@ Authorization: Bearer <access_token>
 
 ### 4. Token Refresh
 
-**Endpoint:** `POST /api/user/refresh-token/`
+**Endpoint:** `POST /user/refresh-token/`
 
 - When the **access token expires**, the client sends the **refresh token** to this endpoint.
 - If the refresh token is valid (not expired, not blacklisted), a new access token is issued.
@@ -219,7 +221,7 @@ Authorization: Bearer <access_token>
 
 **Sample Request:**
 ```json
-POST /api/user/refresh-token/
+POST /user/refresh-token/
 {
   "refresh": "eyJhbGciOi..."
 }
@@ -270,21 +272,76 @@ Permissions are enforced in `TaskPermission` (`task/permissions.py`):
 
 ---
 
+## Attribute-Based Access Control (ABAC)
+
+In addition to role (RBAC), access is also gated by a **contextual attribute — the current time**. This layer applies uniformly, on top of RBAC, regardless of role:
+
+> **After 6:00 PM (18:00, server local time), no user — including Admin — may create, update, or delete a task. Read access (`GET`/`HEAD`/`OPTIONS`) remains available at all times.**
+
+This is enforced as the *first* check inside `TaskPermission.has_permission()`, before any role-based branching, so it uniformly overrides every role's write access once the time window is hit:
+
+```python
+from django.utils import timezone
+from rest_framework.permissions import BasePermission
+
+
+class TaskPermission(BasePermission):
+
+    WRITE_METHODS = ["POST", "PUT", "PATCH", "DELETE"]
+
+    def has_permission(self, request, view):
+
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        # ABAC: block all writes after 6 PM, regardless of role
+        current_hour = timezone.localtime(timezone.now()).hour
+        if current_hour >= 18 and request.method in self.WRITE_METHODS:
+            return False
+
+        if request.user.is_superuser:
+            return True
+
+        if request.user.roles == "Customer":
+            return request.method in ["GET", "HEAD", "OPTIONS"]
+
+        if request.user.roles == "Staff":
+            return request.method in [
+                "GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH",
+            ]
+
+        return False
+```
+
+| Time window | Read (`GET`) | Write (`POST`/`PUT`/`PATCH`/`DELETE`) |
+|-------------|:-------------:|:----------------------------------------:|
+| Before 6 PM | ✅ (per role) | ✅ (per role, see RBAC table above) |
+| 6 PM onward | ✅ (per role) | ❌ for **everyone**, including Admin |
+
+**Design notes:**
+- Uses `timezone.localtime(timezone.now())` (not raw `datetime.now()`) so the check respects Django's `TIME_ZONE` setting rather than the container's system clock, which is UTC by default in Docker.
+- This is a genuine ABAC example (decision based on a runtime *attribute* — time of request — rather than a static *role*), layered on top of the existing RBAC checks.
+- If Admin should be **exempt** from the time restriction (business rule TBD), move the time-gate check to *after* the `is_superuser` branch instead of before it.
+
+**Testing note:** since this depends on wall-clock time, tests should mock `django.utils.timezone.now` (via `unittest.mock.patch`) rather than relying on when the suite happens to run — see `task/tests/test_abac_permissions.py`.
+
+---
+
 ## API Endpoints
 
 | Method | Endpoint | Auth Required | Description |
 |--------|----------|:--------------:|--------------|
-| POST | `/api/user/signup/` | No | Register a new user |
-| POST | `/api/user/login/` | No | Obtain access & refresh tokens |
-| POST | `/api/user/logout/` | Yes | Blacklist refresh token |
-| POST | `/api/user/refresh-token/` | No (refresh token in body) | Get new access token |
-| GET | `/api/task/tasks/` | Yes | List tasks |
-| POST | `/api/task/tasks/` | Yes (Admin/Staff) | Create a task |
-| GET | `/api/task/tasks/{id}/` | Yes | Retrieve a task |
-| PUT/PATCH | `/api/task/tasks/{id}/` | Yes (Admin/Staff) | Update a task |
-| DELETE | `/api/task/tasks/{id}/` | Yes (Admin only) | Delete a task |
+| POST | `/user/signup/` | No | Register a new user |
+| POST | `/user/login/` | No | Obtain access & refresh tokens |
+| POST | `/user/logout/` | Yes | Blacklist refresh token |
+| POST | `/user/refresh-token/` | No (refresh token in body) | Get new access token |
+| GET | `/task/tasks/` | Yes | List tasks (blocked nowhere; time-agnostic) |
+| POST | `/task/tasks/` | Yes (Admin/Staff, **before 6 PM only**) | Create a task |
+| GET | `/task/tasks/{id}/` | Yes | Retrieve a task |
+| PUT/PATCH | `/task/tasks/{id}/` | Yes (Admin/Staff, **before 6 PM only**) | Update a task |
+| DELETE | `/task/tasks/{id}/` | Yes (Admin only, **before 6 PM only**) | Delete a task |
 
-> Base path (`/api/user/`, `/api/task/`) assumes these urls.py files are included under those prefixes in the project's root `urls.py`. Adjust if your routing differs.
+> Base path (`/user/`, `/task/`) matches the prefixes registered in the project's root `urls.py` (`path("user/", include("user.urls"))`, `path("task/", include("task.urls"))`).
 
 ---
 
@@ -390,7 +447,7 @@ docker compose exec web pytest --cov=.
 
 Run a specific test file:
 ```bash
-docker compose exec web pytest user/tests/test_auth.py
+docker compose exec web pytest task/tests/test_views.py
 ```
 
 Suggested test coverage:
@@ -398,7 +455,8 @@ Suggested test coverage:
 - Login: correct credentials, wrong password, non-existent email
 - Logout: valid token blacklisted, already-blacklisted token, missing token
 - Refresh: valid refresh token, expired refresh token, blacklisted refresh token
-- Task permissions: each role against each HTTP method
+- Task RBAC: each role (Admin/Staff/Customer) against each HTTP method (`task/tests/test_views.py`)
+- Task ABAC: write operations blocked at/after 6 PM for every role, reads unaffected, mocking `django.utils.timezone.now` rather than relying on wall-clock time (`task/tests/test_abac_permissions.py`)
 
 ---
 
@@ -533,10 +591,7 @@ else:
 | Task create/update/delete by Customer | `403 Forbidden` |
 | Task delete by Staff | `403 Forbidden` (only Admin can delete) |
 | Any Task endpoint without auth | `401 Unauthorized` |
+| Task create/update/delete by **any role, at/after 6 PM** | `403 Forbidden` (ABAC time-gate; read still allowed) |
 | CORS request from disallowed origin | Blocked by browser (no `Access-Control-Allow-Origin` header) |
 
 ---
-
-## License
-
-This project is provided for assignment/demo purposes.
