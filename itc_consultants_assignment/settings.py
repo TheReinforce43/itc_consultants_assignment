@@ -227,8 +227,8 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',  # For authenticated users
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '5/minute',      # 5 hits per minute for unauthenticated
-        'user': '30/minute'      # 30 hits per minute for authenticated
+        'anon': '60/minute',      # 5 hits per minute for unauthenticated
+        'user': '120/minute'      # 30 hits per minute for authenticated
     }
 }
 
