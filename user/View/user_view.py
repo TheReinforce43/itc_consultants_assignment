@@ -42,18 +42,15 @@ class UserLoginAPIView(APIView):
         return Response(serializer.validated_data,status = status.HTTP_200_OK)
     
 # User log Out API View
-
 class UserLogoutAPIView(APIView):
     permission_classes = [IsAuthenticated]
     serializer_class = UserLogoutSerializer
 
-    def post(self,request,*args,**kwargs):
+    def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return Response(serializer.validated_data,status = status.HTTP_200_OK)
-
-
-
+        serializer.save()
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 class RefreshAccessTokenView(APIView):
 

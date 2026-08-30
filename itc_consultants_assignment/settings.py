@@ -59,6 +59,7 @@ THIRD_PARTY_APPS =[
 
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
 
 ]
 
@@ -227,8 +228,8 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',  # For authenticated users
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '60/minute',      # 5 hits per minute for unauthenticated
-        'user': '120/minute'      # 30 hits per minute for authenticated
+        'anon': '60/minute',      # 60 hits per minute for unauthenticated
+        'user': '120/minute'      # 120 hits per minute for authenticated
     }
 }
 

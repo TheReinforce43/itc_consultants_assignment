@@ -22,6 +22,9 @@ def test_signup_serializer_valid_minimal_data():
     data = {
         "email": "signup1@example.com",
         "password": "StrongPass123!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"  # Assuming roles is a required field
     }
 
     serializer = UserSignUpSerializer(data=data)
@@ -31,6 +34,9 @@ def test_signup_serializer_valid_minimal_data():
     user = serializer.save()
 
     assert user.email == "signup1@example.com"
+    assert user.first_name == "Farhan"
+    assert user.last_name == "Kabir"
+    assert user.roles == "Customer"
     assert user.check_password("StrongPass123!")
 
 
@@ -41,6 +47,9 @@ def test_signup_serializer_valid_with_phone_number():
         "email": "signup2@example.com",
         "password": "StrongPass123!",
         "phone_number": "1234567890",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     serializer = UserSignUpSerializer(data=data)
@@ -58,6 +67,9 @@ def test_signup_serializer_password_is_write_only():
     data = {
         "email": "writeonly@example.com",
         "password": "StrongPass123!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     serializer = UserSignUpSerializer(data=data)
@@ -73,6 +85,9 @@ def test_signup_serializer_rejects_non_digit_phone_number():
         "email": "badphone@example.com",
         "password": "StrongPass123!",
         "phone_number": "abc1234567",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     serializer = UserSignUpSerializer(data=data)
@@ -88,6 +103,9 @@ def test_signup_serializer_rejects_too_short_phone_number():
         "email": "shortphone@example.com",
         "password": "StrongPass123!",
         "phone_number": "12345",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     serializer = UserSignUpSerializer(data=data)
@@ -103,6 +121,9 @@ def test_signup_serializer_rejects_too_long_phone_number():
         "email": "longphone@example.com",
         "password": "StrongPass123!",
         "phone_number": "1" * 16,
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     serializer = UserSignUpSerializer(data=data)
@@ -118,12 +139,18 @@ def test_signup_serializer_rejects_duplicate_phone_number():
         email="firstphone@example.com",
         password="StrongPass123!",
         phone_number="1112223333",
+        first_name="Farhan",
+        last_name="Kabir",
+        roles="Customer"
     )
 
     data = {
         "email": "secondphone@example.com",
         "password": "StrongPass123!",
         "phone_number": "1112223333",
+        "first_name": "John",
+        "last_name": "Doe",
+        "roles": "Customer"
     }
 
     serializer = UserSignUpSerializer(data=data)
@@ -138,6 +165,9 @@ def test_signup_serializer_rejects_duplicate_email(customer):
     data = {
         "email": "customer@example.com",
         "password": "StrongPass123!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     serializer = UserSignUpSerializer(data=data)
@@ -151,6 +181,9 @@ def test_signup_serializer_requires_email():
 
     data = {
         "password": "StrongPass123!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     serializer = UserSignUpSerializer(data=data)
@@ -169,6 +202,9 @@ def test_login_serializer_valid_credentials_returns_tokens(customer):
     data = {
         "email": "customer@example.com",
         "password": "StrongPass123!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     serializer = UserLoginSerializer(data=data)
@@ -186,6 +222,9 @@ def test_login_serializer_wrong_password_raises_validation_error(customer):
     data = {
         "email": "customer@example.com",
         "password": "WrongPassword!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     serializer = UserLoginSerializer(data=data)
@@ -200,6 +239,9 @@ def test_login_serializer_nonexistent_email_raises_validation_error():
     data = {
         "email": "doesnotexist@example.com",
         "password": "StrongPass123!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     serializer = UserLoginSerializer(data=data)
@@ -251,5 +293,8 @@ def test_get_user_serializer_returns_expected_fields(customer):
     serializer = GetUserSerializer(customer)
 
     assert serializer.data["email"] == "customer@example.com"
+    assert serializer.data["roles"] == "Customer"
+    assert serializer.data["first_name"] == "Farhan"
+    assert serializer.data["last_name"] == "Kabir"
     assert serializer.data["roles"] == "Customer"
     assert "password" not in serializer.data

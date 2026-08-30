@@ -15,6 +15,9 @@ def test_signup_view_creates_user(api_client):
     data = {
         "email": "newuser@example.com",
         "password": "StrongPass123!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     response = api_client.post(
@@ -31,6 +34,9 @@ def test_signup_view_rejects_duplicate_email(api_client, customer):
     data = {
         "email": "customer@example.com",
         "password": "StrongPass123!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     response = api_client.post(
@@ -47,6 +53,9 @@ def test_signup_view_rejects_invalid_phone_number(api_client):
         "email": "badphoneview@example.com",
         "password": "StrongPass123!",
         "phone_number": "notanumber",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     response = api_client.post(
@@ -62,6 +71,9 @@ def test_signup_view_does_not_require_authentication(api_client):
     data = {
         "email": "openaccess@example.com",
         "password": "StrongPass123!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     response = api_client.post(
@@ -81,6 +93,9 @@ def test_login_view_valid_credentials_returns_tokens(api_client, customer):
     data = {
         "email": "customer@example.com",
         "password": "StrongPass123!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     response = api_client.post(
@@ -98,6 +113,9 @@ def test_login_view_wrong_password_returns_400(api_client, customer):
     data = {
         "email": "customer@example.com",
         "password": "WrongPassword!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     response = api_client.post(
@@ -115,6 +133,9 @@ def test_login_view_nonexistent_email_returns_400(api_client):
     data = {
         "email": "ghost@example.com",
         "password": "StrongPass123!",
+        "first_name": "Farhan",
+        "last_name": "Kabir",
+        "roles": "Customer"
     }
 
     response = api_client.post(

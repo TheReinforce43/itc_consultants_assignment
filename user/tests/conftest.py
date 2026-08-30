@@ -17,6 +17,8 @@ def customer(db):
         email="customer@example.com",
         password="StrongPass123!",
         roles="Customer",
+        first_name="Farhan",
+        last_name="Kabir"
     )
 
 
@@ -26,6 +28,8 @@ def staff(db):
         email="staff@example.com",
         password="StrongPass123!",
         roles="Staff",
+        first_name="Farhan",
+        last_name="Kabir"   
     )
 
 
@@ -34,5 +38,8 @@ def admin(db):
     return User.objects.create_superuser(
         email="admin@example.com",
         password="StrongPass123!",
+        first_name="Farhan",
+        last_name="Kabir",
+        roles="Admin"
     )
 
